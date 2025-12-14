@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import NavBar from './NavBar';
 import Main from './Main';
 
@@ -47,9 +47,40 @@ const tempWatchedData = [
   },
 ];
 
+const API_KEY = '5fc49b40';
+
 export default function App() {
   const [movies, setMovies] = useState(tempMovieData);
   const [watched, setWatched] = useState(tempWatchedData);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const query = 'interstelw2lar';
+
+  useEffect(() => {
+    async function fetchMovies() {
+      try {
+        setIsLoading(true);
+        await fetch(`http://www.omdbapi.com/?i=tt3896198&apikey=${API_KEY}&s=${query}`)
+          .then(async (res) => {
+            if (!res.ok) throw new Error('Something went wrong with fetching movies');
+            return await res.json();
+          })
+          .then((data) => {
+            console.log(data);
+            if (data.Response === 'False') throw new Error('Movie not found');
+            setMovies(data.Search);
+          });
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    fetchMovies();
+  }, []);
+
+  useEffect(() => console.log('err: ', error), [error]);
   return (
     <>
       <NavBar>
@@ -58,7 +89,9 @@ export default function App() {
       </NavBar>
       <Main>
         <Box>
-          <MovieList movies={movies} />
+          {isLoading && <Loader />}
+          {!isLoading && !error && <MovieList movies={movies} />}
+          {error && <ErrorMessage msg={error} />}
         </Box>
         <Box>
           <WatchedSummary watched={watched} />
@@ -67,6 +100,21 @@ export default function App() {
         {/* <WatchedBox /> */}
       </Main>
     </>
+  );
+}
+
+function Loader() {
+  return <p className="loader">Loading...</p>;
+}
+
+function ErrorMessage({ msg }) {
+  return (
+    <p className="error">
+      <span>
+        🙈 Error:
+        <br /> {msg}
+      </span>
+    </p>
   );
 }
 
