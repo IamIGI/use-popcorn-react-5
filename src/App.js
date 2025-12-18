@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useReducer, useRef, useState } from 'react';
 import NavBar from './NavBar';
 import Main from './Main';
 import StarRating from './components/StarRating';
@@ -8,7 +8,11 @@ const API_KEY = '5fc49b40';
 export default function App() {
   const [query, setQuery] = useState('');
   const [movies, setMovies] = useState([]);
-  const [watched, setWatched] = useState([]);
+  const [watched, setWatched] = useState(() => {
+    const storedValue = localStorage.getItem('watched');
+    if (storedValue) return JSON.parse(storedValue);
+    return [];
+  });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState(null);
@@ -48,14 +52,21 @@ export default function App() {
   function handleAddWatched(movie) {
     setWatched((watched) => {
       const isIncluded = watched.find((watchedMovie) => watchedMovie.imdbID === movie.imdbID);
+      // console.log('t1- handleAddWatched: ', watched);
+      const newWatchedValue = isIncluded ? watched : [...watched, movie];
+      // localStorage.setItem('watched', JSON.stringify(newWatchedValue));
 
-      return isIncluded ? watched : [...watched, movie];
+      return newWatchedValue;
     });
   }
 
   function handleDeleteWatched(id) {
     setWatched((watched) => watched.filter((movie) => movie.imdbID !== id));
   }
+
+  useEffect(() => {
+    localStorage.setItem('watched', JSON.stringify(watched));
+  }, [watched]);
 
   useEffect(() => {
     if (!query.length) {
@@ -66,6 +77,7 @@ export default function App() {
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => {
+      handleCloseMovie();
       fetchMovies(query, controller);
     }, 500); // 0.5s
 
@@ -181,6 +193,7 @@ function WatchedSummary({ watched }) {
   const avgImdbRating = average(watched.map((movie) => movie.imdbRating)).toFixed(2);
   const avgUserRating = average(watched.map((movie) => movie.userRating)).toFixed(2);
   const avgRuntime = average(watched.map((movie) => movie.runtime));
+
   return (
     <div className="summary">
       <h2>Movies you watched</h2>
@@ -243,6 +256,24 @@ function WatchedMovie({ movie, onDeleteWatched }) {
 }
 
 function Search({ query, setQuery }) {
+  const inputEl = useRef(null);
+
+  useEffect(() => {
+    function handleEnterKey(e) {
+      if (document.activeElement === inputEl) return;
+
+      if (e.code === 'Enter') {
+        inputEl.current.focus();
+        setQuery('');
+      }
+    }
+    //Focus on input when component mounts
+    inputEl.current.focus();
+    document.addEventListener('keydown', (e) => handleEnterKey(e));
+
+    return () => document.removeEventListener('keydown', (e) => handleEnterKey(e));
+  }, [setQuery]);
+
   return (
     <input
       className="search"
@@ -250,6 +281,7 @@ function Search({ query, setQuery }) {
       placeholder="Search movies..."
       value={query}
       onChange={(e) => setQuery(e.target.value)}
+      ref={inputEl}
     />
   );
 }
@@ -266,6 +298,12 @@ function MovieDetails({ selectedId, onCloseMovie, onAddWatched }) {
   const [movie, setMovie] = useState({});
   const [isLoading, setIsLoading] = useState(false);
   const [userRating, setUserRating] = useState('');
+
+  const countRef = useRef(0);
+
+  useEffect(() => {
+    if (userRating) countRef.current++;
+  }, [userRating]);
 
   async function getMovieDetails(id) {
     setIsLoading(true);
@@ -291,6 +329,7 @@ function MovieDetails({ selectedId, onCloseMovie, onAddWatched }) {
       imdbRating: Number(movie.imdbRating),
       Runtime: Number(movie.Runtime.split(' ').at(0)),
       userRating,
+      countRatingDecisions: countRef.current,
     };
 
     onAddWatched(newWatchedMovie);
@@ -308,14 +347,14 @@ function MovieDetails({ selectedId, onCloseMovie, onAddWatched }) {
     return () => (document.title = 'usePopcorn');
   }, [movie]);
 
-  function handleEscKey(e) {
-    if (e.code === 'Escape') {
-      onCloseMovie();
-      console.log('CLOSING');
-    }
-  }
-
   useEffect(() => {
+    function handleEscKey(e) {
+      if (e.code === 'Escape') {
+        onCloseMovie();
+        console.log('CLOSING');
+      }
+    }
+
     document.addEventListener('keydown', (e) => handleEscKey(e));
 
     return () => document.removeEventListener('keydown', (e) => handleEscKey(e));
